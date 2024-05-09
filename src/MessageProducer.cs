@@ -21,7 +21,9 @@ public sealed class MessageProducer(
     public async Task Produce<T>(T message, TopicConfiguration configuration)
         where T : IMessageData
     {
-        await administratorClient.CreateTopic<T>(configuration);
+        var topic = TopicNamingHelper.GetTopicName<T>(kafkaConfiguration.Value.TopicPrefix);
+
+        await administratorClient.CreateTopic(topic, configuration);
         
         var config = new ProducerConfig
         {
@@ -35,15 +37,9 @@ public sealed class MessageProducer(
 
         try
         {
-            var topic = TopicNamingHelper.GetTopicName<T>(kafkaConfiguration.Value.TopicPrefix);
-            
             var delivery = await producer.ProduceAsync(topic,
                 new Message<Null, string>
                 {
-                    Headers = new Headers
-                    {
-                        { "id", Guid.NewGuid().ToByteArray() }  
-                    },
                     Value = JsonSerializer.Serialize(new BaseMessage<T>(message))
                 });
 

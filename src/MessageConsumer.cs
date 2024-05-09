@@ -1,8 +1,4 @@
-using System;
-using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Confluent.Kafka;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,22 +7,26 @@ namespace Robustor;
 
 public interface IMessageConsumer
 {
-    Task Consume<T>(Func<BaseMessage<T>, Task> handle, CancellationToken cancellationToken)
-        where T : IMessageData;
+    Task Consume<T>(TopicConfiguration topicConfiguration, Func<BaseMessage<T>, Task> handle, 
+        CancellationToken cancellationToken)
+            where T : IMessageData;
 }
 
 public sealed class MessageConsumer(
     IAdministratorClient administratorClient,
     IOptions<KafkaConfiguration> kafkaConfiguration,
-    ILogger<MessageConsumer> logger,
-    TopicConfiguration topicConfiguration)
+    ILogger<MessageConsumer> logger)
         : IMessageConsumer
 {
-    public async Task Consume<T>(Func<BaseMessage<T>, Task> handle,
+    public async Task Consume<T>(
+        TopicConfiguration topicConfiguration,
+        Func<BaseMessage<T>, Task> handle,
         CancellationToken cancellationToken)
             where T : IMessageData
     {
-        await administratorClient.CreateTopic<T>(topicConfiguration);
+        var topic = TopicNamingHelper.GetTopicName<T>(kafkaConfiguration.Value.TopicPrefix);
+        
+        await administratorClient.CreateTopic(topic, topicConfiguration);
         
         var config = new ConsumerConfig
         {
@@ -38,8 +38,6 @@ public sealed class MessageConsumer(
             // TODO: sounds usefull
             // GroupInstanceId =  
         };
-
-        var topic = TopicNamingHelper.GetTopicName<T>(kafkaConfiguration.Value.TopicPrefix);
         
         // Main thread
         _ = Task.Run(async () =>

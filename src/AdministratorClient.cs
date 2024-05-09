@@ -8,7 +8,7 @@ namespace Robustor;
 
 public interface IAdministratorClient
 {
-    Task CreateTopic<T>(TopicConfiguration topicConfiguration);
+    Task CreateTopic(string topic, TopicConfiguration topicConfiguration);
 }
 
 public class AdministratorClient : IAdministratorClient
@@ -35,12 +35,17 @@ public class AdministratorClient : IAdministratorClient
             .Build();
     }
     
-    public async Task CreateTopic<T>(TopicConfiguration topicConfiguration)
+    public async Task CreateTopic(string topic, TopicConfiguration topicConfiguration)
     {
-        var topic = TopicNamingHelper.GetTopicName<T>(_kafkaConfiguration.TopicPrefix);
+        if (_declaredTopics.Contains(topic))
+            return;
         
         var topicExists = await TopicExists(topic);
-        if (topicExists) return;
+        if (topicExists)
+        {
+            _declaredTopics.Add(topic);
+            return;
+        }
         
         var replicationFactor = await GetReplicationFactor();
 
@@ -83,8 +88,6 @@ public class AdministratorClient : IAdministratorClient
                 {
                     RequestTimeout = TimeSpan.FromSeconds(10),
                 });
-            
-            _declaredTopics.Add(topic);
 
             return describeTopics.TopicDescriptions.First().Name == topic;
         }

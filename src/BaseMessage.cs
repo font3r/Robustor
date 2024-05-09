@@ -7,5 +7,5 @@ public sealed record BaseMessage<T>(T Data)
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public string TraceId { get; init; } = Activity.Current?.TraceId.ToString();
-    public DateTimeOffset EventOccured { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset EventOccured { get; init; } = DateTimeOffset.Now;
 }
