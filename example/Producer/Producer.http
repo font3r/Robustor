@@ -1,0 +1,6 @@
+@Producer_HostAddress = https://localhost:5001
+
+GET {{Producer_HostAddress}}/messages
+Accept: application/json
+
+###
