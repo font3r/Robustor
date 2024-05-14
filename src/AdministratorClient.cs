@@ -8,12 +8,11 @@ namespace Robustor;
 
 public interface IAdministratorClient
 {
-    Task CreateTopic(string topic, TopicConfiguration topicConfiguration);
+    Task CreateTopics(IEnumerable<string> topics, TopicConfiguration topicConfiguration);
 }
 
 public class AdministratorClient : IAdministratorClient
 {
-    private readonly KafkaConfiguration _kafkaConfiguration;
     private readonly ILogger<AdministratorClient> _logger;
     
     private readonly IAdminClient _adminClient;
@@ -22,7 +21,6 @@ public class AdministratorClient : IAdministratorClient
     public AdministratorClient(IOptions<KafkaConfiguration> kafkaConfiguration, 
         ILogger<AdministratorClient> logger)
     {
-        _kafkaConfiguration = kafkaConfiguration.Value;
         _logger = logger;
         
         var config = new AdminClientConfig
@@ -35,71 +33,90 @@ public class AdministratorClient : IAdministratorClient
             .Build();
     }
     
-    public async Task CreateTopic(string topic, TopicConfiguration topicConfiguration)
+    public async Task CreateTopics(IEnumerable<string> topics, TopicConfiguration topicConfiguration)
     {
-        if (_declaredTopics.Contains(topic))
-            return;
-        
-        var topicExists = await TopicExists(topic);
-        if (topicExists)
+        var topicsToDescribe = topics.Where(topic => !_declaredTopics.Contains(topic)).ToList();
+        if (topicsToDescribe.Count == 0) return;
+
+        var topicsToCreate = new List<string>();
+        var topicExistenceResult = await DescribeTopic(topicsToDescribe);
+        foreach (var (describedTopic, exists) in topicExistenceResult)
         {
-            _declaredTopics.Add(topic);
-            return;
+            if (exists)
+            {
+                _declaredTopics.Add(describedTopic);
+                _logger.LogInformation("Topic {Topic} already exists on Kafka, skipping creation", describedTopic);
+            }
+            else
+            {
+                topicsToCreate.Add(describedTopic);
+            }
         }
+
+        if (topicsToCreate.Count == 0)
+            return;
         
         var replicationFactor = await GetReplicationFactor();
 
         try
         {
-            _logger.LogInformation("Creating topic {Topic}", topic);
+            _logger.LogInformation("Creating topics {Topics}", string.Join(',', topicsToCreate));
             
             await _adminClient.CreateTopicsAsync(
-                new List<TopicSpecification>
+                topicsToCreate.Select(newTopic => new TopicSpecification
                 {
-                    new()
-                    {
-                        Name = string.Concat(_kafkaConfiguration.TopicPrefix, topic),
-                        NumPartitions = topicConfiguration.Partitions,
-                        ReplicationFactor = (short)replicationFactor
-                    }
-                },
+                    Name = newTopic,
+                    NumPartitions = topicConfiguration.Partitions,
+                    ReplicationFactor = (short)replicationFactor
+                }),
                 new CreateTopicsOptions
                 {
-                    RequestTimeout = TimeSpan.FromSeconds(10),
-                    OperationTimeout = TimeSpan.FromSeconds(10)
+                    RequestTimeout = Variables.GlobalRequestTimeout,
+                    OperationTimeout = Variables.GlobalOperationTimeout
                 });
             
-            _declaredTopics.Add(topic);
+            topicsToCreate.ForEach(declaredTopic => _declaredTopics.Add(declaredTopic));
         }
         catch (CreateTopicsException ex)
         {
-            _logger.LogError(ex, "Exception during creating topic {Topic}", topic);
+            foreach (var createTopicReport in ex.Results)
+            {
+                _logger.LogError(ex, "Exception during creating topic {Topic}, error {Error}, code {ErrorCode}", 
+                    createTopicReport.Topic, createTopicReport.Error.Reason, createTopicReport.Error.Code);    
+            }
+
             throw;
         }
     }
     
-    private async Task<bool> TopicExists(string topic)
+    private async Task<IDictionary<string, bool>> DescribeTopic(IReadOnlyCollection<string> topics)
     {
         try
         {
-            var describeTopics = await _adminClient.DescribeTopicsAsync(
-                TopicCollection.OfTopicNames([topic]),
+            await _adminClient.DescribeTopicsAsync(
+                TopicCollection.OfTopicNames(topics),
                 new DescribeTopicsOptions
                 {
-                    RequestTimeout = TimeSpan.FromSeconds(10),
+                    RequestTimeout = Variables.GlobalRequestTimeout,
                 });
 
-            return describeTopics.TopicDescriptions.First().Name == topic;
+            return topics.ToDictionary(x => x, _ => true);
         }
         catch (DescribeTopicsException ex)
         {
-            var describedTopic = ex.Results.TopicDescriptions.FirstOrDefault();
-            if (describedTopic is null) throw;
-            
-            if (describedTopic.Error.IsError && describedTopic.Error.Code is ErrorCode.UnknownTopicOrPart)
-                return false;
+            var describedTopics = new Dictionary<string, bool>();
+            foreach (var topicDescription in ex.Results.TopicDescriptions)
+            {
+                if (topicDescription.Error.IsError && topicDescription.Error.Code is ErrorCode.UnknownTopicOrPart)
+                    describedTopics.Add(topicDescription.Name, false);
+                else
+                {
+                    // TODO: Revalidate approach
+                    throw new Exception($"Topic {topicDescription.Name} in unknown state!");
+                }
+            }
 
-            throw;
+            return describedTopics;
         }
     }
     
@@ -110,7 +127,7 @@ public class AdministratorClient : IAdministratorClient
             var describeResult = await _adminClient.DescribeClusterAsync(
                 new DescribeClusterOptions
                 {
-                    RequestTimeout = TimeSpan.FromSeconds(10)
+                    RequestTimeout = Variables.GlobalRequestTimeout
                 });
 
             return describeResult.Nodes.Count;
