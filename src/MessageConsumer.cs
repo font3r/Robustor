@@ -7,12 +7,13 @@ namespace Robustor;
 
 public interface IMessageConsumer
 {
-    Task Consume<T>(TopicConfiguration topicConfiguration, Func<BaseMessage<T>, Task> handle, 
+    Task Consume<T>(TopicConfiguration topicConfiguration, Func<BaseMessage<T>, Task<MessageContext>> handle, 
         CancellationToken cancellationToken)
             where T : IMessageData;
 }
 
 public sealed class MessageConsumer(
+    IInternalMessageProducer messageProducer,
     IAdministratorClient administratorClient,
     IOptions<KafkaConfiguration> kafkaConfiguration,
     ILogger<MessageConsumer> logger)
@@ -20,35 +21,23 @@ public sealed class MessageConsumer(
 {
     public async Task Consume<T>(
         TopicConfiguration topicConfiguration,
-        Func<BaseMessage<T>, Task> handle,
+        Func<BaseMessage<T>, Task<MessageContext>> handle,
         CancellationToken cancellationToken)
             where T : IMessageData
     {
-        var topic = TopicNamingHelper.GetTopicName<T>(kafkaConfiguration.Value.TopicPrefix);
+        var topics = TopicNamingHelper.GetResilienceTopics<T>(kafkaConfiguration.Value.TopicPrefix,
+            topicConfiguration.RetryCount).ToList();
         
-        await administratorClient.CreateTopic(topic, topicConfiguration);
-        
-        var config = new ConsumerConfig
-        {
-            BootstrapServers = string.Concat(kafkaConfiguration.Value.BootstrapServers, ","),
-            AutoOffsetReset = AutoOffsetReset.Earliest,
-            GroupId = kafkaConfiguration.Value.ConsumerGroup,
-            ClientId = "robustor-client-id-test"
-            
-            // TODO: sounds usefull
-            // GroupInstanceId =  
-        };
+        await administratorClient.CreateTopics(topics, topicConfiguration);
         
         // Main thread
         _ = Task.Run(async () =>
         {
             var semaphore = new SemaphoreSlim(10, 10);
-            var consumer = new ConsumerBuilder<Null, string>(config)
-                .SetErrorHandler(HandleError)
-                .Build();
+            var consumer = GetConsumer();
 
-            consumer.Subscribe(topic); // TODO: Handle all topics for retry
-            Console.WriteLine($"Subscribed to topic {topic}");
+            consumer.Subscribe(topics[..^1]); // TODO: Administrator client creates DLQ topic but we should not subscribe to it
+            logger.LogInformation("Subscribed to topic {Topics}", string.Join(", ", topics));
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -60,12 +49,26 @@ public sealed class MessageConsumer(
                 {
                     try
                     {
-                        await handle(JsonSerializer.Deserialize<BaseMessage<T>>(
-                            consumeResult.Message.Value));
+                        logger.LogInformation("Received message from topic {Topic}", consumeResult.Topic);
+                        
+                        var baseMessage = JsonSerializer.Deserialize<BaseMessage<T>>(consumeResult.Message.Value);
+                        var messageContext = await handle(baseMessage);
+
+                        if (messageContext.Result is MessageStatus.Error)
+                        {
+                            var retryCount = GetRetry(consumeResult.Message.Headers);
+                            var nextRetry = retryCount + 1;
+
+                            if (nextRetry <= topicConfiguration.RetryCount)
+                                await messageProducer.ProduceRetry(baseMessage.Data, nextRetry, messageContext);    
+                            else
+                                await messageProducer.ProduceToDlq(baseMessage.Data, messageContext);
+                        }
                     }
                     catch (ConsumeException consumeException)
                     {
-                        Console.WriteLine($"Exception during consume {consumeException.Message}");
+                        // TODO: Retry and dlq
+                        logger.LogError(consumeException, "Exception during consume");
                     }
                     finally
                     {
@@ -74,6 +77,38 @@ public sealed class MessageConsumer(
                 }, cancellationToken);
             }
         }, cancellationToken);
+    }
+
+    private static int GetRetry(Headers messageHeaders)
+    {
+        var retryHeaderRaw = messageHeaders.SingleOrDefault(x => x.Key == Variables.MessageHeaders.Retry);
+        if (retryHeaderRaw is null) return default;
+
+        if (!int.TryParse(new ReadOnlySpan<byte>(retryHeaderRaw.GetValueBytes()), out var retry))
+            throw new Exception("Unable to parse retry header");
+
+        return retry;
+    }
+
+    private IConsumer<Null, string> GetConsumer()
+    {
+        var config = new ConsumerConfig
+        {
+            BootstrapServers = kafkaConfiguration.Value.ConnectionString,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            GroupId = kafkaConfiguration.Value.ConsumerGroup,
+            ClientId = "robustor-client-id-test",
+            AllowAutoCreateTopics = false
+            
+            // TODO: sounds usefull
+            // GroupInstanceId =  
+        };
+        
+        var consumer = new ConsumerBuilder<Null, string>(config)
+            .SetErrorHandler(HandleError)
+            .Build();
+
+        return consumer;
     }
     
     private void HandleError(IConsumer<Null, string> consumer, Error error)

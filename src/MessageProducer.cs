@@ -8,26 +8,21 @@ namespace Robustor;
 
 public interface IMessageProducer
 {
-    Task Produce<T>(T message, TopicConfiguration configuration)
+    Task Produce<T>(T message)
         where T : IMessageData;
 }
 
 public sealed class MessageProducer(
-    IAdministratorClient administratorClient,
     IOptions<KafkaConfiguration> kafkaConfiguration,
     ILogger<MessageProducer> logger)
         : IMessageProducer
 {
-    public async Task Produce<T>(T message, TopicConfiguration configuration)
-        where T : IMessageData
+    private IProducer<Null, string> CreateProducer()
     {
-        var topic = TopicNamingHelper.GetTopicName<T>(kafkaConfiguration.Value.TopicPrefix);
-
-        await administratorClient.CreateTopic(topic, configuration);
-        
         var config = new ProducerConfig
         {
-            BootstrapServers = kafkaConfiguration.Value.ConnectionString
+            BootstrapServers = kafkaConfiguration.Value.ConnectionString,
+            AllowAutoCreateTopics = false
         };
         
         // TODO: Should producers be reused if they are build?
@@ -35,15 +30,23 @@ public sealed class MessageProducer(
             .SetErrorHandler(HandleError)
             .Build();
 
+        return producer;
+    }
+    
+    public async Task Produce<T>(T message)
+        where T : IMessageData
+    {
+        var topic = TopicNamingHelper.GetTopicName<T>(kafkaConfiguration.Value.TopicPrefix);
+
         try
         {
-            var delivery = await producer.ProduceAsync(topic,
+            var delivery = await CreateProducer().ProduceAsync(topic,
                 new Message<Null, string>
                 {
                     Value = JsonSerializer.Serialize(new BaseMessage<T>(message))
                 });
 
-            logger.LogInformation("Successful delivery on topic {Topic}, partition {Partition}, offset {Offset}",
+            logger.LogInformation("Successful delivery to topic {Topic}, partition {Partition}, offset {Offset}",
                 topic, delivery.Partition.Value, delivery.Offset.Value);
         }
         catch (Exception ex)
@@ -52,7 +55,7 @@ public sealed class MessageProducer(
             throw;
         }
     }
-    
+
     private void HandleError(IProducer<Null, string> producer, Error error)
     {
         logger.LogError("Producer error {Name}, reason {Reason}, code {Code}",

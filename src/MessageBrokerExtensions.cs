@@ -9,6 +9,7 @@ public static class MessageBrokerExtensions
     public static IServiceCollection AddKafkaMessageBroker(this IServiceCollection services, IConfiguration configuration)
     {
         services.TryAddSingleton<IMessageProducer, MessageProducer>();
+        services.TryAddSingleton<IInternalMessageProducer, InternalMessageProducer>();
         services.TryAddSingleton<IMessageConsumer, MessageConsumer>();
         
         services.TryAddSingleton<IAdministratorClient, AdministratorClient>();
