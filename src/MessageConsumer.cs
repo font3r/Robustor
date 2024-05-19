@@ -26,9 +26,9 @@ public sealed class MessageConsumer(
             where T : IMessageData
     {
         var topics = TopicNamingHelper.GetResilienceTopics<T>(kafkaConfiguration.Value.TopicPrefix,
-            topicConfiguration.RetryCount).ToList();
+            topicConfiguration.RetryCount);
         
-        await administratorClient.CreateTopics(topics, topicConfiguration);
+        await administratorClient.CreateTopics(topics.Keys, topicConfiguration);
         
         // Main thread
         _ = Task.Run(async () =>
@@ -36,7 +36,11 @@ public sealed class MessageConsumer(
             var semaphore = new SemaphoreSlim(10, 10);
             var consumer = GetConsumer();
 
-            consumer.Subscribe(topics[..^1]); // TODO: Administrator client creates DLQ topic but we should not subscribe to it
+            var topicsToSubscribe = topics
+                .Where(x => x.Value is not TopicType.Dlq)
+                .Select(x => x.Key);
+            
+            consumer.Subscribe(topicsToSubscribe);
             logger.LogInformation("Subscribed to topic {Topics}", string.Join(", ", topics));
 
             while (!cancellationToken.IsCancellationRequested)

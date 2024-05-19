@@ -10,26 +10,20 @@ public static class TopicNamingHelper
     
     public static string GetDlqTopicName<T>(string prefix)
         => string.Concat(GetTopicName<T>(prefix), Variables.TopicSeparator, Variables.DlqSuffix);
-    
-    public static int? GetRetryFromTopicName(string topic, TopicConfiguration topicConfiguration)
+
+    public static IDictionary<string, TopicType> GetResilienceTopics<T>(string prefix, int retries)
     {
-        for (var retry = 1; retry <= topicConfiguration.RetryCount; retry++)
+        var topics = new Dictionary<string, TopicType>
         {
-            if (topic.EndsWith(Variables.RetrySuffix(retry)))
-                return retry;    
-        }
+            { GetTopicName<T>(prefix), TopicType.Main }
+        };
 
-        return null;
-    }
-
-    public static IEnumerable<string> GetResilienceTopics<T>(string prefix, int retries)
-    {
-        yield return GetTopicName<T>(prefix);
-        
         for (var retry = 1; retry <= retries; retry++)
-            yield return GetRetryTopicName<T>(prefix, retry);
+            topics.Add(GetRetryTopicName<T>(prefix, retry), TopicType.Retry);
 
-        yield return GetDlqTopicName<T>(prefix);
+        topics.Add(GetDlqTopicName<T>(prefix), TopicType.Dlq);
+
+        return topics;
     }
     
     private static IEnumerable<char> ToSnakeCase(string value)
