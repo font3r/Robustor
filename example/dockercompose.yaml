@@ -4,6 +4,7 @@ services:
     hostname: zookeeper1
     hostname: zookeeper1
     container_name: zookeeper1
+    restart: on-failure
     ports:
       - "2181:2181"
     environment:
@@ -15,6 +16,7 @@ services:
     image: confluentinc/cp-kafka:7.6.1
     ports:
       - "9091:9091"
+    restart: on-failure
     environment:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_INTERNAL:PLAINTEXT,LISTENER_EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_INTERNAL
@@ -28,6 +30,7 @@ services:
     image: confluentinc/cp-kafka:7.6.1
     ports:
       - "9092:9092"
+    restart: on-failure      
     environment:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_INTERNAL:PLAINTEXT,LISTENER_EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_INTERNAL
@@ -41,6 +44,7 @@ services:
     image: confluentinc/cp-kafka:7.6.1
     ports:
       - "9093:9093"
+    restart: on-failure
     environment:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_INTERNAL:PLAINTEXT,LISTENER_EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_INTERNAL
@@ -49,3 +53,11 @@ services:
       KAFKA_BROKER_ID: 3
     depends_on:
       - zookeeper1
+
+  postgres:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    container_name: postgres
+    environment:
+      POSTGRES_PASSWORD: password

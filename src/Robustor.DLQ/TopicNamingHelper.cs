@@ -1,6 +1,6 @@
 namespace Robustor;
 
-public static class TopicNamingHelper
+internal static class TopicNamingHelper
 {
     public static string GetTopicName<T>(string prefix)
         => string.Concat(ToSnakeCase(string.Concat(prefix, TrimName(typeof(T).Name))));

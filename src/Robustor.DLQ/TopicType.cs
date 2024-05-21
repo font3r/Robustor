@@ -1,6 +1,6 @@
 ﻿namespace Robustor;
 
-public enum TopicType
+internal enum TopicType
 {
     None = 0,
     Main,

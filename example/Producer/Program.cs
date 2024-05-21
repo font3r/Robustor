@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Robustor;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -6,9 +7,12 @@ builder.Services.AddKafkaMessageBroker(builder.Configuration);
 
 var app = builder.Build();
 
-app.MapPost("/messages", async (IMessageProducer messageProducer) =>
+app.MapPost("/messages", async ([FromQuery] int count, IMessageProducer messageProducer) =>
 {
-    await messageProducer.Produce(new OrderCreated(Guid.NewGuid()));
+    for (var i = 0; i < count; i++)
+    {
+        await messageProducer.Produce(new OrderCreated(Guid.NewGuid()));    
+    }
 });
 
 app.Run();

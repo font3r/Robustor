@@ -4,7 +4,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{2F027A73-A16
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{B4B11598-F130-434C-A3DC-A9A83E515BA9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Robustor", "src\Robustor.csproj", "{6A844EC0-AD87-4CF0-A378-4943026BD74D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Robustor.DLQ", "src\Robustor.DLQ\Robustor.DLQ.csproj", "{6A844EC0-AD87-4CF0-A378-4943026BD74D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Robustor.UnitTests", "tests\Robustor.UnitTests.csproj", "{0F8A3F0B-B3D6-4D49-8091-14076C77FDAA}"
 EndProject

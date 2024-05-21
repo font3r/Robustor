@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
@@ -17,20 +18,39 @@ public sealed class MessageProducer(
     ILogger<MessageProducer> logger)
         : IMessageProducer
 {
-    private IProducer<Null, string> CreateProducer()
+    private readonly ConcurrentDictionary<string, IProducer<Null, string>> _producers = new();
+    
+    private IProducer<Null, string> GetProducer(string topic)
     {
-        var config = new ProducerConfig
+        try
         {
-            BootstrapServers = kafkaConfiguration.Value.ConnectionString,
-            AllowAutoCreateTopics = false
-        };
-        
-        // TODO: Should producers be reused if they are build?
-        var producer = new ProducerBuilder<Null, string>(config)
-            .SetErrorHandler(HandleError)
-            .Build();
+            var entered = Monitor.TryEnter(this);
+            if (!entered)
+                throw new Exception("Unable to obtain lock on producer");
 
-        return producer;
+            if (_producers.TryGetValue(topic, out var storedProducer))
+                return storedProducer;
+
+            var config = new ProducerConfig
+            {
+                BootstrapServers = kafkaConfiguration.Value.ConnectionString,
+                AllowAutoCreateTopics = false
+            };
+
+            var producer = new ProducerBuilder<Null, string>(config)
+                .SetErrorHandler(HandleError)
+                .Build();
+
+            logger.LogInformation("Adding producer to internal store");
+            if (!_producers.TryAdd(topic, producer))
+                throw new Exception("Unable to add producer to store");
+
+            return producer;
+        }
+        finally
+        {
+            Monitor.Exit(this);
+        }
     }
     
     public async Task Produce<T>(T message)
@@ -40,7 +60,7 @@ public sealed class MessageProducer(
 
         try
         {
-            var delivery = await CreateProducer().ProduceAsync(topic,
+            var delivery = await GetProducer(topic).ProduceAsync(topic,
                 new Message<Null, string>
                 {
                     Value = JsonSerializer.Serialize(new BaseMessage<T>(message))

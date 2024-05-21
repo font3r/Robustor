@@ -108,11 +108,12 @@ public class AdministratorClient : IAdministratorClient
             foreach (var topicDescription in ex.Results.TopicDescriptions)
             {
                 if (topicDescription.Error.IsError && topicDescription.Error.Code is ErrorCode.UnknownTopicOrPart)
+                {
                     describedTopics.Add(topicDescription.Name, false);
+                }
                 else
                 {
-                    // TODO: Revalidate approach
-                    throw new Exception($"Topic {topicDescription.Name} in unknown state!");
+                    throw new Exception($"Unable to determine if topic exists, topic {topicDescription.Name} in unknown state!");
                 }
             }
 

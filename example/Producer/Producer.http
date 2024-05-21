@@ -1,6 +1,13 @@
 @Producer_HostAddress = https://localhost:5001
+@Consumer_HostAddress = https://localhost:5003
 
-GET {{Producer_HostAddress}}/messages
+POST {{Producer_HostAddress}}/messages?count=1000
 Accept: application/json
 
 ###
+GET {{Consumer_HostAddress}}/messages
+Accept: application/json
+
+###
+DELETE {{Consumer_HostAddress}}/messages/cleanup
+Accept: application/json

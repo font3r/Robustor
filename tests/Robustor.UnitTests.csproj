@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\src\Robustor.csproj" />
+    <ProjectReference Include="..\src\Robustor.DLQ\Robustor.DLQ.csproj" />
   </ItemGroup>
 
 </Project>
