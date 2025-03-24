@@ -24,4 +24,32 @@ internal static class Variables
         internal const string ErrorMessage = "error.message";
         internal const string ErrorCode = "error.code";
     }
+    
+    public static class Configuration
+    {
+        public const int DefaultPageSize = 100;
+        public const string DefaultConnection = "DefaultConnection";
+    }
+    
+    public static class Queries
+    {
+        public static string AddMessage()
+            => """
+                INSERT INTO Outbox (Id, Topic, TraceContext, Message, CreatedAt)
+                VALUES (@Id, @Topic, @TraceContext, @Message, @CreatedAt)
+               """;
+        
+        public static string GetMessages()
+            => """
+                    SELECT Id, Topic, TraceContext, Message, CreatedAt 
+                    FROM Outbox 
+                    ORDER BY CreatedAt 
+                    OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY;
+                """;
+
+        public static string DeleteMessages()
+            => """
+                    DELETE FROM Outbox WHERE Id IN @Ids
+               """;
+    }
 }

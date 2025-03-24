@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+﻿using Shouldly;
 using Xunit;
 
 namespace Robustor.UnitTests;
@@ -16,7 +16,7 @@ public class TopicNamingHelperTests
     {
         var topicName = TopicNamingHelper.GetTopicName<OrderCreatedEvent>(prefix);
         
-        topicName.Should().Be(expectedTopicName);
+        topicName.ShouldBe(expectedTopicName);
     }
     
     [Theory]
@@ -27,6 +27,6 @@ public class TopicNamingHelperTests
     {
         var topicName = TopicNamingHelper.GetTopicName<CreateOrderCommand>(prefix);
         
-        topicName.Should().Be(expectedTopicName);
+        topicName.ShouldBe(expectedTopicName);
     }
 }

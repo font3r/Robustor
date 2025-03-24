@@ -72,7 +72,7 @@ public sealed class MessageConsumer(
                         if (messageContext.Result is MessageStatus.Error)
                         {
                             await HandleRetry(consumeResult.Message.Headers, topicConfiguration,
-                                baseMessage.Data, messageContext);
+                                baseMessage.Message, messageContext);
                         }
                     }
                     catch (JsonException jsonException) // TODO: Which exceptions should we retry?
@@ -113,7 +113,7 @@ public sealed class MessageConsumer(
     private static int GetRetry(Headers messageHeaders)
     {
         var retryHeaderRaw = messageHeaders.SingleOrDefault(x => x.Key == Variables.MessageHeaders.Retry);
-        if (retryHeaderRaw is null) return default;
+        if (retryHeaderRaw is null) return 0;
 
         if (!int.TryParse(new ReadOnlySpan<byte>(retryHeaderRaw.GetValueBytes()), out var retry))
             throw new Exception("Unable to parse retry header");

@@ -2,10 +2,10 @@ using System.Diagnostics;
 
 namespace Robustor;
 
-public sealed record BaseMessage<T>(T Data)
+public sealed record BaseMessage<T>(T Message)
     where T : IMessageData
 {
     public Guid Id { get; init; } = Guid.NewGuid();
-    public string TraceId { get; init; } = Activity.Current?.TraceId.ToString();
+    public string? TraceContext { get; init; } = Activity.Current?.Id;
     public DateTimeOffset EventOccured { get; init; } = DateTimeOffset.Now;
 }

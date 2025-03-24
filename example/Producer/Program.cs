@@ -3,17 +3,22 @@ using Robustor;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddKafkaMessageBroker(builder.Configuration);
+builder.Services.AddKafkaMessageBroker(builder.Configuration)
+    .AddOutbox(builder.Configuration);
 
 var app = builder.Build();
 
-app.MapPost("/messages", async ([FromQuery] int count, IMessageProducer messageProducer) =>
+app.MapPost("/messages", async ([FromQuery] int count, IOutboxRepository outboxRepository) =>
 {
     for (var i = 0; i < count; i++)
     {
-        await messageProducer.Produce(new OrderCreated(Guid.NewGuid()));    
+        await outboxRepository.Add(new BaseMessage<OrderCreated>(
+            new OrderCreated(Guid.NewGuid())));
     }
 });
+
+app.MapGet("/outbox", async (IOutboxRepository outboxRepository) =>
+    TypedResults.Ok(await outboxRepository.Get()));
 
 app.Run();
 

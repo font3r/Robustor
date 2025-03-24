@@ -3,8 +3,8 @@
 public class MessageContext
 {
     public MessageStatus Result { get; private set; }
-    public string ErrorMessage { get; private set; }
-    public string ErrorCode { get; private set; }
+    public string ErrorMessage { get; private set; } = null!;
+    public string? ErrorCode { get; private set; }
 
     public static MessageContext Success()
         => new()
@@ -12,7 +12,7 @@ public class MessageContext
             Result = MessageStatus.Success
         };
 
-    public static MessageContext Error(string message, string code = null)
+    public static MessageContext Error(string message, string? code = null)
         => new()
         {
             Result = MessageStatus.Error,

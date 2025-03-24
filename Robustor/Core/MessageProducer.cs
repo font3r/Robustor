@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
 using Microsoft.Extensions.Logging;
@@ -9,6 +8,7 @@ namespace Robustor;
 
 public interface IMessageProducer
 {
+    Task Produce(string topic, string message);
     Task Produce<T>(T message)
         where T : IMessageData;
 }
@@ -65,6 +65,23 @@ public sealed class MessageProducer(
                 {
                     Value = JsonSerializer.Serialize(new BaseMessage<T>(message))
                 });
+
+            logger.LogInformation("Successful delivery to topic {Topic}, partition {Partition}, offset {Offset}",
+                topic, delivery.Partition.Value, delivery.Offset.Value);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Delivery failed");
+            throw;
+        }
+    }
+    
+    public async Task Produce(string topic, string message)
+    {
+        try
+        {
+            var delivery = await GetProducer(topic).ProduceAsync(topic,
+                new Message<Null, string> { Value = message });
 
             logger.LogInformation("Successful delivery to topic {Topic}, partition {Partition}, offset {Offset}",
                 topic, delivery.Partition.Value, delivery.Offset.Value);

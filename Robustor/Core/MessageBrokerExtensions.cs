@@ -14,8 +14,8 @@ public static class MessageBrokerExtensions
         
         services.TryAddSingleton<IAdministratorClient, AdministratorClient>();
 
-        services.AddOptions<KafkaConfiguration>()
-            .Bind(configuration.GetSection(Variables.KafkaConfigurationSection));
+        services.Configure<KafkaConfiguration>(
+            configuration.GetSection(Variables.KafkaConfigurationSection));
         
         return services;
     }
