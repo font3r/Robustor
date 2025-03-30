@@ -8,7 +8,6 @@ internal static class Variables
     internal const string CommandSuffix = "Command";
     internal const string EventSuffix = "Event";
 
-    // TODO: Move to options
     internal static readonly TimeSpan GlobalRequestTimeout = TimeSpan.FromSeconds(10);
     internal static readonly TimeSpan GlobalOperationTimeout = TimeSpan.FromSeconds(10);
     internal static readonly TimeSpan BaseMessageRetryDelay = TimeSpan.FromSeconds(1);
