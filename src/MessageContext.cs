@@ -4,7 +4,7 @@ public class MessageContext
 {
     public MessageStatus Result { get; private set; }
     public string ErrorMessage { get; private set; } = null!;
-    public string? ErrorCode { get; private set; }
+    public string? ErrorCode { get; private set; } = null!;
 
     public static MessageContext Success()
         => new()

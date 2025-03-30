@@ -14,6 +14,7 @@ public static class Extensions
         //Migrations.InitOutbox(connectionString!);
         
         services.AddTransient<IDbConnection>(_ => new SqlConnection(connectionString));
+        services.AddTransient<IOutboxMessageProducer, OutboxMessageProducer>();
         services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddHostedService<OutboxBackgroundService>();
         

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace Robustor.Outbox;
 
-public interface IMessageProducer
+public interface IOutboxMessageProducer
 {
     Task Produce(string topic, string key, string message, CancellationToken cancellationToken);
 }
@@ -12,7 +12,7 @@ public interface IMessageProducer
 public class OutboxMessageProducer(
     IOptions<KafkaConfiguration> kafkaConfiguration,
     ILogger<OutboxMessageProducer> logger) 
-    : IMessageProducer
+    : IOutboxMessageProducer
 {
     public async Task Produce(string topic, string key, string message, CancellationToken cancellationToken)
     {

@@ -12,7 +12,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Consumer", "example\Consume
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Producer", "example\Producer\Producer.csproj", "{0E1714EF-10B4-4F0B-A1DA-4CB13922E14E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Robustor", "Robustor\Robustor.csproj", "{38A015AD-B60F-413E-9FA1-42821EA7E900}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Robustor", "src\Robustor.csproj", "{38A015AD-B60F-413E-9FA1-42821EA7E900}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

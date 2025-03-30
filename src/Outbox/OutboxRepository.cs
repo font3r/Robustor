@@ -1,15 +1,14 @@
 ﻿using System.Data;
 using System.Text.Json;
 using Dapper;
-using Microsoft.Extensions.Options;
+using Robustor.Core;
 
-namespace Robustor;
+namespace Robustor.Outbox;
 
 public class OutboxRepository(
-    IOptions<KafkaConfiguration> kafkaConfiguration,
     IDbConnection dbConnection) : IOutboxRepository
 {
-    public async Task Add<T>(BaseMessage<T> baseMessage)
+    public async Task Add<T>(string topic, BaseMessage<T> baseMessage)
         where T : IMessageData
     {
         await dbConnection.ExecuteAsync(
@@ -17,8 +16,7 @@ public class OutboxRepository(
             new
             {
                 Id = baseMessage.Id,
-                // TODO: move config from repo
-                Topic = TopicNamingHelper.GetTopicName<T>(kafkaConfiguration.Value.TopicPrefix),
+                Topic = topic,
                 TraceContext = baseMessage.TraceContext,
                 Message = JsonSerializer.Serialize(baseMessage),
                 CreatedAt = DateTimeOffset.Now

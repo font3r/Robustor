@@ -60,10 +60,7 @@ public sealed class MessageConsumer<TMessage>(
                     }
                     catch (JsonException jsonException) // TODO: Which exceptions should we retry?
                     {
-                        // TODO: Deserialization exceptions won't be able to pass standard logic with deserialization
-                        
-                        //await HandleRetry(consumeResult.Message.Headers, topicConfiguration, 
-                        //    baseMessage.Data, messageContext);
+                        logger.LogError(jsonException, "Error occured while processing message");
                     }
                     catch (ConsumeException consumeException)
                     {

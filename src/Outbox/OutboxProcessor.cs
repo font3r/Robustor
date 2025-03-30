@@ -17,11 +17,11 @@ public class OutboxBackgroundService(IServiceScopeFactory serviceScopeFactory)
             if (messages.Count == 0)
                 continue;
 
-            var producer = scope.ServiceProvider.GetRequiredService<IInternalMessageProducer>();
+            var producer = scope.ServiceProvider.GetRequiredService<IOutboxMessageProducer>();
 
             foreach (var message in messages)
             {
-                await producer.Produce(message.Topic, Guid.NewGuid(), message.Message, stoppingToken);
+                await producer.Produce(message.Topic, message.Id.ToString(), message.Message, stoppingToken);
             }
 
             await repo.Delete(messages.Select(x => x.Id));

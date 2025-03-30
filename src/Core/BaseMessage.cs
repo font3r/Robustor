@@ -5,6 +5,6 @@ public sealed record BaseMessage<T>(T Message)
 {
     public Guid Id { get; init; }
     public string Type { get; init; } = null!;
-    public string? TraceContext { get; init; }
+    public string? TraceContext { get; init; } = null!;
     public DateTimeOffset EventOccured { get; init; }
 }

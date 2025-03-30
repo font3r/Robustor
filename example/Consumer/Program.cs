@@ -1,6 +1,6 @@
 using Consumer;
 using Microsoft.EntityFrameworkCore;
-using Robustor;
+using Robustor.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 

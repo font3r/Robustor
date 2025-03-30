@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using Robustor;
+using Robustor.Core;
+using Robustor.Outbox;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,8 +13,8 @@ app.MapPost("/messages", async ([FromQuery] int count, IOutboxRepository outboxR
 {
     for (var i = 0; i < count; i++)
     {
-        await outboxRepository.Add(new BaseMessage<OrderCreated>(
-            new OrderCreated(Guid.NewGuid())));
+        await outboxRepository.Add("robustor_order_created", 
+            new BaseMessage<OrderCreated>(new OrderCreated(Guid.NewGuid())));
     }
 });
 
