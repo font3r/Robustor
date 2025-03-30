@@ -1,15 +1,16 @@
 ﻿using Robustor;
+using Robustor.Core;
 
 namespace Consumer;
 
 public class KafkaConsumerBackgroundService(
-    IMessageConsumer messageConsumer,
+    IMessageConsumer<OrderCreated> messageConsumer,
     IServiceScopeFactory serviceScopeFactory) 
         : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await messageConsumer.Consume<OrderCreated>(
+        await messageConsumer.Consume(
             new TopicConfiguration { RetryCount = 5, Partitions = 20 }, 
             async (message, cancellationToken) =>
             {
@@ -19,7 +20,7 @@ public class KafkaConsumerBackgroundService(
                 var failure = Random.Shared.Next(0, 101 / (Variables.FailurePercentage + 1)) == 0;
                 if (failure) return MessageContext.Error("test error");
                 
-                context.Add(new Order { Id = message.Message.Id });
+                context.Add(new Order { Id = message.Id });
                 await context.SaveChangesAsync(cancellationToken);
                 
                 return MessageContext.Success();

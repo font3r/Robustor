@@ -1,26 +1,28 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Robustor;
+namespace Robustor.Core;
 
-public interface IMessageProducer
+public interface IMessageProducer<in TMessage>
 {
     Task Produce(string topic, string message);
-    Task Produce<T>(T message)
-        where T : IMessageData;
+    Task Produce(Guid key, TMessage message);
 }
 
-public sealed class MessageProducer(
+public sealed class MessageProducer<TMessage>(
     IOptions<KafkaConfiguration> kafkaConfiguration,
-    ILogger<MessageProducer> logger)
-        : IMessageProducer
+    ILogger<MessageProducer<TMessage>> logger)
+    : IMessageProducer<TMessage>
+    where TMessage : IMessageData
 {
-    private readonly ConcurrentDictionary<string, IProducer<Null, string>> _producers = new();
+    private readonly ConcurrentDictionary<string, IProducer<Guid, TMessage>> _producers = new();
     
-    private IProducer<Null, string> GetProducer(string topic)
+    private IProducer<Guid, TMessage> GetProducer(string topic)
     {
         try
         {
@@ -37,7 +39,10 @@ public sealed class MessageProducer(
                 AllowAutoCreateTopics = false
             };
 
-            var producer = new ProducerBuilder<Null, string>(config)
+            var producer = new ProducerBuilder<Guid, TMessage>(config)
+                .SetPartitioner(topic, IdBasedPartitioner.Partitioner)
+                .SetKeySerializer(new GuidKeySerializer())
+                .SetValueSerializer(new BaseMessageSerializer<TMessage>())
                 .SetErrorHandler(HandleError)
                 .Build();
 
@@ -52,18 +57,35 @@ public sealed class MessageProducer(
             Monitor.Exit(this);
         }
     }
-    
-    public async Task Produce<T>(T message)
-        where T : IMessageData
+
+    /// <summary>
+    /// Produces message to topic
+    /// </summary>
+    /// <param name="key">message if, if null uses message id</param>
+    /// <param name="message">message payload</param>
+    public async Task Produce(Guid key, TMessage message)
     {
-        var topic = TopicNamingHelper.GetTopicName<T>(kafkaConfiguration.Value.TopicPrefix);
+        var topic = TopicNamingHelper.GetTopicName<TMessage>(kafkaConfiguration.Value.TopicPrefix);
 
         try
         {
-            var delivery = await GetProducer(topic).ProduceAsync(topic,
-                new Message<Null, string>
+            var delivery = await GetProducer(topic)
+                .ProduceAsync(topic, new Message<Guid, TMessage>
                 {
-                    Value = JsonSerializer.Serialize(new BaseMessage<T>(message))
+                    Key = key,
+                    Value = message,
+                    Timestamp = new Timestamp(DateTimeOffset.UtcNow),
+                    Headers =
+                    [
+                        new Header(Variables.MessageHeaders.Id, 
+                            Guid.NewGuid().ToByteArray(true)),
+                        new Header(Variables.MessageHeaders.Type, 
+                            Encoding.UTF8.GetBytes(message.GetType().ToString())),
+                        new Header(Variables.MessageHeaders.TraceContext, 
+                            Encoding.UTF8.GetBytes(Activity.Current?.Id ?? new Activity("message.publisher").Id!)),
+                        new Header(Variables.MessageHeaders.EventOccured, 
+                            Encoding.UTF8.GetBytes(DateTimeOffset.UtcNow.ToString()))
+                    ]
                 });
 
             logger.LogInformation("Successful delivery to topic {Topic}, partition {Partition}, offset {Offset}",
@@ -80,7 +102,17 @@ public sealed class MessageProducer(
     {
         try
         {
-            var delivery = await GetProducer(topic).ProduceAsync(topic,
+            var config = new ProducerConfig
+            {
+                BootstrapServers = kafkaConfiguration.Value.ConnectionString,
+                AllowAutoCreateTopics = false
+            };
+            
+            var tempProducer = new ProducerBuilder<Null, string>(config)
+                //.SetErrorHandler(HandleError)
+                .Build();
+            
+            var delivery = await tempProducer.ProduceAsync(topic,
                 new Message<Null, string> { Value = message });
 
             logger.LogInformation("Successful delivery to topic {Topic}, partition {Partition}, offset {Offset}",
@@ -93,7 +125,7 @@ public sealed class MessageProducer(
         }
     }
 
-    private void HandleError(IProducer<Null, string> producer, Error error)
+    private void HandleError(IProducer<Guid, TMessage> producer, Error error)
     {
         logger.LogError("Producer error {Name}, reason {Reason}, code {Code}",
             producer.Name, error.Reason, error.Code);

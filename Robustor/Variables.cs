@@ -20,9 +20,14 @@ internal static class Variables
 
     internal static class MessageHeaders
     {
-        internal const string Retry = "retry";
+        internal const string ErrorRetry = "error.retry";
         internal const string ErrorMessage = "error.message";
         internal const string ErrorCode = "error.code";
+        
+        internal const string Id = "message.id";
+        internal const string Type = "message.type";
+        internal const string TraceContext = "message.trace_context";
+        internal const string EventOccured = "message.event_occured";
     }
     
     public static class Configuration
@@ -35,13 +40,13 @@ internal static class Variables
     {
         public static string AddMessage()
             => """
-                INSERT INTO Outbox (Id, Topic, TraceContext, Message, CreatedAt)
-                VALUES (@Id, @Topic, @TraceContext, @Message, @CreatedAt)
+                INSERT INTO Outbox (Id, Topic, Type, TraceContext, Message, CreatedAt)
+                VALUES (@Id, @Topic, @Type, @TraceContext, @Message, @CreatedAt)
                """;
         
         public static string GetMessages()
             => """
-                    SELECT Id, Topic, TraceContext, Message, CreatedAt 
+                    SELECT Id, Topic, Type, TraceContext, Message, CreatedAt 
                     FROM Outbox 
                     ORDER BY CreatedAt 
                     OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY;

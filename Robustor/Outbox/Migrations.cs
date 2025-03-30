@@ -1,7 +1,7 @@
 ﻿using System.Reflection;
 using DbUp;
 
-namespace Robustor;
+namespace Robustor.Outbox;
 
 public static class Migrations
 {

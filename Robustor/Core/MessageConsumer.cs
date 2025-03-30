@@ -3,32 +3,32 @@ using Confluent.Kafka;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Robustor;
+namespace Robustor.Core;
 
-public interface IMessageConsumer
+public interface IMessageConsumer<out TMessage>
+    where TMessage : IMessageData
 {
-    Task Consume<T>(
-        TopicConfiguration topicConfiguration, 
-        Func<BaseMessage<T>, CancellationToken, Task<MessageContext>> handle, 
-        CancellationToken cancellationToken)
-            where T : IMessageData;
+    Task Consume(
+        TopicConfiguration topicConfiguration,
+        Func<TMessage, CancellationToken, Task<MessageContext>> handle,
+        CancellationToken cancellationToken);
 }
 
-public sealed class MessageConsumer(
+public sealed class MessageConsumer<TMessage>(
     IInternalMessageProducer messageProducer,
     IAdministratorClient administratorClient,
     IOptions<KafkaConfiguration> kafkaConfiguration,
-    ILogger<MessageConsumer> logger)
-        : IMessageConsumer
+    ILogger<MessageConsumer<TMessage>> logger)
+        : IMessageConsumer<TMessage>
+        where TMessage : IMessageData
 {
-    public async Task Consume<T>(
+    public async Task Consume(
         TopicConfiguration topicConfiguration,
-        Func<BaseMessage<T>, CancellationToken, Task<MessageContext>> handle,
+        Func<TMessage, CancellationToken, Task<MessageContext>> handle,
         CancellationToken cancellationToken)
-            where T : IMessageData
     {
-        var topics = TopicNamingHelper.GetResilienceTopics<T>(kafkaConfiguration.Value.TopicPrefix,
-            topicConfiguration.RetryCount);
+        var topics = TopicNamingHelper.GetResilienceTopics<TMessage>(
+            kafkaConfiguration.Value.TopicPrefix, topicConfiguration.RetryCount);
         
         await administratorClient.CreateTopics(topics.Keys, topicConfiguration);
         
@@ -56,24 +56,7 @@ public sealed class MessageConsumer(
                 {
                     try
                     {
-                        logger.LogDebug("Received message from topic {Topic}", consumeResult.Topic);
-
-                        if (topics[consumeResult.Topic] is TopicType.Retry)
-                        {
-                            var retryDelay = Variables.BaseMessageRetryDelay * GetRetry(consumeResult.Message.Headers);
-                            logger.LogDebug("Delaying handle for {RetryDelay}", retryDelay);
-                            
-                            await Task.Delay(retryDelay, cancellationToken);
-                        }
-
-                        var baseMessage = JsonSerializer.Deserialize<BaseMessage<T>>(consumeResult.Message.Value);
-                        var messageContext = await handle(baseMessage, cancellationToken); // TODO: Add new token per process
-
-                        if (messageContext.Result is MessageStatus.Error)
-                        {
-                            await HandleRetry(consumeResult.Message.Headers, topicConfiguration,
-                                baseMessage.Message, messageContext);
-                        }
+                        await HandleMessage(consumeResult, topics, handle, topicConfiguration, cancellationToken);
                     }
                     catch (JsonException jsonException) // TODO: Which exceptions should we retry?
                     {
@@ -97,22 +80,47 @@ public sealed class MessageConsumer(
         }, cancellationToken);
     }
 
-    private async Task HandleRetry<T>(Headers messageHeaders, TopicConfiguration topicConfiguration, 
-        T baseMessageData, MessageContext messageContext) 
-            where T : IMessageData
+    private async Task HandleMessage(ConsumeResult<Guid, TMessage> consumeResult,
+        IDictionary<string, TopicType> topics,
+        Func<TMessage, CancellationToken, Task<MessageContext>> handle,
+        TopicConfiguration topicConfiguration,
+        CancellationToken cancellationToken)
+    {
+        logger.LogDebug("Received message from topic {Topic}", consumeResult.Topic);
+
+        if (topics[consumeResult.Topic] is TopicType.Retry)
+        {
+            var retryDelay = Variables.BaseMessageRetryDelay * GetRetry(consumeResult.Message.Headers);
+            logger.LogDebug("Delaying handle for {RetryDelay}", retryDelay);
+                            
+            await Task.Delay(retryDelay, cancellationToken);
+        }
+
+        var message = consumeResult.Message.Value;
+        // extract message headers
+        //var headers = consumeResult.Message.Headers;
+        var messageContext = await handle(message, cancellationToken); // TODO: Add new token per process
+
+        if (messageContext.Result is MessageStatus.Error)
+            await HandleRetry(consumeResult.Message.Headers, topicConfiguration, message, messageContext, 
+                cancellationToken);
+    }
+
+    private async Task HandleRetry(Headers messageHeaders, TopicConfiguration topicConfiguration, 
+        TMessage message, MessageContext messageContext, CancellationToken cancellationToken) 
     {
         var retryCount = GetRetry(messageHeaders);
         var nextRetry = retryCount + 1;
 
         if (nextRetry <= topicConfiguration.RetryCount)
-            await messageProducer.ProduceRetry(baseMessageData, nextRetry, messageContext);    
+            await messageProducer.ProduceRetry(message, nextRetry, messageContext, cancellationToken);    
         else
-            await messageProducer.ProduceToDlq(baseMessageData, messageContext);
+            await messageProducer.ProduceToDlq(message, messageContext, cancellationToken);
     }
 
     private static int GetRetry(Headers messageHeaders)
     {
-        var retryHeaderRaw = messageHeaders.SingleOrDefault(x => x.Key == Variables.MessageHeaders.Retry);
+        var retryHeaderRaw = messageHeaders.SingleOrDefault(x => x.Key == Variables.MessageHeaders.ErrorRetry);
         if (retryHeaderRaw is null) return 0;
 
         if (!int.TryParse(new ReadOnlySpan<byte>(retryHeaderRaw.GetValueBytes()), out var retry))
@@ -121,28 +129,27 @@ public sealed class MessageConsumer(
         return retry;
     }
 
-    private IConsumer<Null, string> GetConsumer()
+    private IConsumer<Guid, TMessage> GetConsumer()
     {
         var config = new ConsumerConfig
         {
             BootstrapServers = kafkaConfiguration.Value.ConnectionString,
             AutoOffsetReset = AutoOffsetReset.Earliest,
             GroupId = kafkaConfiguration.Value.ConsumerGroup,
-            AllowAutoCreateTopics = false
-            
-            // TODO: sounds usefull
-            // ClientId = "robustor-client-id-test",
-            // GroupInstanceId =  
+            AllowAutoCreateTopics = false,
+            Acks = Acks.All  
         };
         
-        var consumer = new ConsumerBuilder<Null, string>(config)
+        var consumer = new ConsumerBuilder<Guid, TMessage>(config)
+            .SetKeyDeserializer(new GuidKeySerializer())
+            .SetValueDeserializer(new BaseMessageSerializer<TMessage>())
             .SetErrorHandler(HandleError)
             .Build();
 
         return consumer;
     }
     
-    private void HandleError(IConsumer<Null, string> consumer, Error error)
+    private void HandleError(IConsumer<Guid, TMessage> consumer, Error error)
     {
         logger.LogError("Error during consumer on topic {Topic}, reason {Reason}, code {Code}",
             consumer.Subscription.First(), error.Reason, error.Code);

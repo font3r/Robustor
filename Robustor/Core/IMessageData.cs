@@ -1,6 +1,6 @@
-namespace Robustor;
+namespace Robustor.Core;
 
 public interface IMessageData
 {
-    // Marker interface
+    string GetTypeName() => GetType().Name;
 }

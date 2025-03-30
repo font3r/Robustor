@@ -13,7 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Robustor\Robustor.csproj" />
-    <ProjectReference Include="..\..\src\Robustor.csproj" />
   </ItemGroup>
 
 </Project>
